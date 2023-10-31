@@ -10,9 +10,10 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
+This file is for cleaning and formatting Women's Tennis Association Tour data for the years 2014 to 2023, downloaded from http://www.tennis-data.co.uk/alldata.php (accessed 31-10-2023).
 
-
-```{r pressure, echo=FALSE}
+```{r readXL, echo=FALSE, include=FALSE}
+# Read in data for the last 10 years of the WTA tour
 wta2023 <- readxl::read_excel("data/2023.xlsx")
 wta2022 <- readxl::read_excel("data/2022.xlsx")
 wta2021 <- readxl::read_excel("data/2021.xlsx")
@@ -25,10 +26,92 @@ wta2015 <- readxl::read_excel("data/2015.xlsx")
 wta2014 <- readxl::read_excel("data/2014.xlsx")
 ```
 
-```{r}
+The key variables we are going to use are the WTA ranking and/or the WTA ranking points of winners and losers, so we filter down to these details. We also have that the datasets come in slightly different formats, so we ensure the numerical variables are doubles in all 10 datasets before combining them.
+
+```{r filter, include=FALSE}
+# Filter to only variables of interest and ensure all numerical variables are doubles
 wta2023 <- wta2023 %>% 
   select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
-  mutate(year = 2023)
+  mutate(Year = 2023, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2022 <- wta2022 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2022, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2021 <- wta2021 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2021, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2020 <- wta2020 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2020, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2019 <- wta2019 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2019, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2018 <- wta2018 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2018, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2017 <- wta2017 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2017, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2016 <- wta2016 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2016, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2015 <- wta2015 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2015, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+wta2014 <- wta2014 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(Year = 2014, WRank = as.double(WRank), LRank = as.double(LRank),
+         WPts = as.double(WPts), LPts = as.double(LPts))
+```
+
+Now we can combine our data into one single dataset.
+
+```{r combine}
+wta <- bind_rows(wta2014,wta2015,wta2016,wta2017,wta2018,wta2019,wta2020,
+                 wta2021,wta2022,wta2023)
+```
+
+We have that some matches involve players with no WTA ranking (and/or no ranking points). We remove these matches from our analysis.
+
+```{r removeNA}
+# Remove NAs
+wta <- wta %>% filter(!is.na(WRank)) %>% 
+  filter(!is.na(LRank)) %>%
+  filter(!is.na(WPts)) %>%
+  filter(!is.na(LPts))
+```
+
+Now we want to split the data into a fitting dataset and a testing dataset (with roughly a 90/10 split between the two).
+
+```{r splitdata}
+# Split data into fitting dataset (approx 90% of data) and testing dataset
+
+set.seed(20231031)
+numrows <- nrow(wta)
+
+fit_inds <- rbinom(numrows,1,0.9) #Use 90% of the data for fitting
+wta <- wta %>% mutate(Fit = fit_inds)
+
+wta_fit <- wta %>% filter(Fit == 1) # Fitting dataset
+wta_test <- wta %>% filter(Fit == 0) # Testing dataset
+
+wta_fit <- wta_fit %>% select(!Fit)
+wta_test <- wta_test %>% select(!Fit)
+```
+
+Now that we have our cleaned fitting and testing datasets, we save these in csv format for future use.
+
+```{r savedata}
+write_csv(wta_fit,"data/WTAFittingData.csv")
+write_csv(wta_test,"data/WTATestingData.csv")
 ```
 
 

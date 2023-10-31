@@ -1,0 +1,124 @@
+---
+title: "Logistic Regression Tutorial: WTA Odds"
+author: "Emma Davis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+```{r read_data}
+wta <- read_csv("data/WTAFittingData.csv")
+wta
+```
+We define four possible independent variables:
+1. Difference in ranking between the two players
+2. Difference in ranking points between the two players
+3. Ratio in ranking between the two players
+4. Ratio in ranking points between the two players
+
+```{r manipulate}
+wta <- wta %>% mutate(RankDiff = WRank - LRank,
+                      PtsDiff = WPts - LPts)
+wta_wins <- tibble(outcome = rep(1,nrow(wta)),
+                       RankDiff = wta$WRank - wta$LRank,
+                       PtsDiff = wta$WPts - wta$LPts,
+                       RankRatio = wta$WRank/wta$LRank,
+                       PtsRatio = wta$WPts/wta$LPts)
+wta_losses <- tibble(outcome = rep(0,nrow(wta)),
+                       RankDiff = wta$LRank - wta$WRank,
+                       PtsDiff = wta$LPts - wta$WPts,
+                       RankRatio = wta$LRank/wta$WRank,
+                       PtsRatio = wta$LPts/wta$WPts)
+wta_outcomes <- bind_rows(wta_wins, wta_losses)
+wta_outcomes
+```
+
+```{r rank}
+logit_rank <- glm(outcome ~ RankDiff, data = wta_outcomes, family = "binomial")
+summary(logit_rank)
+```
+
+```{r points}
+logit_pts <- glm(outcome ~ PtsDiff, data = wta_outcomes, family = "binomial")
+logit_pts
+```
+
+```{r both}
+
+logit_both <- glm(outcome ~ RankDiff + PtsDiff, data = wta_outcomes, family = "binomial")
+summary(logit_both)
+```
+
+```{r testdata}
+wta_test <- read_csv("data/WTATestingData.csv")
+wta_test <- wta_test %>% mutate(RankDiff = WRank - LRank,
+                      PtsDiff = WPts - LPts)
+wta_test_wins <- tibble(outcome = rep(1,nrow(wta_test)),
+                       RankDiff = wta_test$WRank - wta_test$LRank,
+                       PtsDiff = wta_test$WPts - wta_test$LPts)
+wta_test_losses <- tibble(outcome = rep(0,nrow(wta_test)),
+                       RankDiff = wta_test$LRank - wta_test$WRank,
+                       PtsDiff = wta_test$LPts - wta_test$WPts)
+wta_test_outcomes <- bind_rows(wta_test_wins, wta_test_losses)
+wta_test_outcomes
+```
+
+```{r predict}
+preds <- bind_cols(wta_test_outcomes, predict(logit_both, newdata = wta_test_outcomes, type = "link", se = TRUE))
+preds <- within(preds, {
+    Prob <- plogis(fit)
+    LL <- plogis(fit - (1.96 * se.fit))
+    UL <- plogis(fit + (1.96 * se.fit))
+})
+```
+
+```{r plot}
+ggplot(preds, aes(x = RankDiff, y = PtsDiff, col = Prob)) + 
+  geom_point(alpha = 0.8) + 
+  theme_minimal() +
+  scale_colour_gradientn(colours = terrain.colors(10), trans = 'reverse') 
+```
+
+```{r qual_fit}
+bin_vals <- seq(0,1,0.05)
+preds <- preds %>% mutate(bin = bin_vals[findInterval(preds$Prob, bin_vals)]+0.025)
+preds <- preds %>% group_by(bin) %>% 
+  mutate(winrate = mean(outcome), count = length(outcome)) %>% 
+  ungroup() %>%
+  mutate(x = c(bin_vals,rep(NA,nrow(preds)-length(bin_vals))),
+         y = c(bin_vals,rep(NA,nrow(preds)-length(bin_vals))))
+preds %>% ggplot(aes(x = bin, y = winrate)) + 
+  geom_point(aes(color = count, size = count)) + geom_line(aes(x=x,y=y), lty = 2) +
+  labs(x = "predicted win probability", y = "proportion win") +
+  theme_minimal()
+```
+
+```{r simulation}
+matches <- tibble(event = c("Australian Open", "French Open", "Wimbledon", "US Open"),
+                  player1 = c("Sabalenka","Swiatek", "Vondrusova","Gauff"),
+                  player2 = c("Rybakina","Muchova", "Jabeur","Sabalenka"),
+                  RankDiff = c(5-25, 1-43, 42-6, 6-2),
+                  PtsDiff = c(4340-1585, 8940-1125, 1106-3457, 4595-8746),
+                  oddsW = c(1.86, 1.19, 3.02, 2.19),
+                  oddsL = c(2.22, 7.00, 1.50, 1.83))
+
+preds <- bind_cols(matches, 
+                   predict(logit_both, newdata = matches, type = "link", se = TRUE))
+preds <- within(preds, {
+    Prob <- plogis(fit)
+    LL <- plogis(fit - (1.96 * se.fit))
+    UL <- plogis(fit + (1.96 * se.fit))
+})
+
+preds %>% mutate(winner_odds = 1/(Prob),
+                 loser_odds = 1/(1-Prob))
+```
+
+
+
+
