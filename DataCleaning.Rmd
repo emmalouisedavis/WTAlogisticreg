@@ -1,0 +1,34 @@
+---
+title: 'Data cleaning'
+author: "Emma Davis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+
+```{r pressure, echo=FALSE}
+wta2023 <- readxl::read_excel("data/2023.xlsx")
+wta2022 <- readxl::read_excel("data/2022.xlsx")
+wta2021 <- readxl::read_excel("data/2021.xlsx")
+wta2020 <- readxl::read_excel("data/2020.xlsx")
+wta2019 <- readxl::read_excel("data/2019.xlsx")
+wta2018 <- readxl::read_excel("data/2018.xlsx")
+wta2017 <- readxl::read_excel("data/2017.xlsx")
+wta2016 <- readxl::read_excel("data/2016.xlsx")
+wta2015 <- readxl::read_excel("data/2015.xlsx")
+wta2014 <- readxl::read_excel("data/2014.xlsx")
+```
+
+```{r}
+wta2023 <- wta2023 %>% 
+  select(Surface, Round, Winner, Loser, WRank, LRank, WPts, LPts) %>%
+  mutate(year = 2023)
+```
+
+
