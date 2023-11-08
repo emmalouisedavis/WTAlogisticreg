@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
-This file is for cleaning and formatting Women's Tennis Association Tour data for the years 2014 to 2023, downloaded from http://www.tennis-data.co.uk/alldata.php (accessed 31-10-2023).
+This file is for cleaning and formatting Women's Tennis Association Tour data for the years 2014 to 2023, downloaded from http://www.tennis-data.co.uk/alldata.phpD (accessed 31-10-2023).
 
 ```{r readXL, echo=FALSE, include=FALSE}
 # Read in data for the last 10 years of the WTA tour

@@ -10,16 +10,28 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
+This is a logistic regression tutorial looking at predicting match outcomes and match win probabilities for Women's Tennis Association (WTA) matches.
+
+### 1. Read in the data
+
+First we want to read in the data, which we have already cleaned and formatted in the file `DataCleaning.Rmd`. We have separated the data into fitting and testing datasets (roughly a 90/10 split) with 20,912 matches represented in the fitting data and 2,316 matches in the testing data.
 
 ```{r read_data}
 wta <- read_csv("data/WTAFittingData.csv")
-wta
+head(wta)
 ```
-We define four possible independent variables:
-1. Difference in ranking between the two players
-2. Difference in ranking points between the two players
-3. Ratio in ranking between the two players
-4. Ratio in ranking points between the two players
+
+### 2. Define our predictors
+
+We define four possible predictors, $X_i$, $i\in\{1,2,3,4\}$:
+
+1. $X_1 =$ Difference in ranking between the two players
+
+2. $X_2 =$Difference in ranking points between the two players
+
+3. $X_3 =$Ratio in ranking between the two players
+
+4. $X_4 =$Ratio in ranking points between the two players
 
 ```{r manipulate}
 wta <- wta %>% mutate(RankDiff = WRank - LRank,
@@ -38,21 +50,52 @@ wta_outcomes <- bind_rows(wta_wins, wta_losses)
 wta_outcomes
 ```
 
+Predictors $X_1$ and $X_2$ are not fully independent, but do contain additional information (e.g. ranking points don't necessarily scale linearly with ranking), so we can test their importance by fitting a series of models and comparing the outputs. We leave consideration of $X_3$ and $X_4$ (both in combination and individually) as an exercise.
+
+### 3. Fit the model
+
+The logistic regression model for predictors $X_1,...,X_n$ is of the form
+
+\[ \log\frac{\pi}{1-\pi}=\beta_0+\beta_1X_1+\beta_2X_2+...\beta_nX_n\,.\]
+
+We are going to fit and compare a few different logistic regression models using the `glm` function. At this stage we need to specify our chosen family of distributions using the argument `family = binomial`.
+
+#### Model 1. WTA ranking only
+
+First we fit a model just to predictor $X_1=$ signed difference in WTA ranking.
+
 ```{r rank}
 logit_rank <- glm(outcome ~ RankDiff, data = wta_outcomes, family = "binomial")
 summary(logit_rank)
 ```
 
+Here we see that $X_1$, the signed difference in ranking between two players, is a highly significant predictor for match win success, where the negative sign of the estimate for $\beta_1$ represents that a lower rank relative to your opponent results in a higher win probability. We also observe that the Akaike Information Criterion, which takes into account the number of parameters in the model, is 55012.
+
+#### Model 2. WTA points only
+
+Our next model is just based on predictor $X_2=$ signed difference in WTA ranking points.
+
 ```{r points}
 logit_pts <- glm(outcome ~ PtsDiff, data = wta_outcomes, family = "binomial")
-logit_pts
+summary(logit_pts)
 ```
 
-```{r both}
+Here we see that $X_2$ is also a highly significant predictor for match win success, where the positive sign of the estimate for $\beta_2$ represents that having more ranking points relative to your opponent results in a higher win probability. We also observe the Akaike Information Criterion, which takes into account the number of parameters in the model, is 54322. This is lower than in the previous model, reflecting a preference for this model.
 
+#### Model 3. WTA ranking and WTA points
+
+Our final model for comparison is based on both predictors: $X_1$ and $X_2$.
+
+```{r both}
 logit_both <- glm(outcome ~ RankDiff + PtsDiff, data = wta_outcomes, family = "binomial")
 summary(logit_both)
 ```
+
+Here we see that both $X_1$ and $X_2$ are highly significant predictors for match win success. We observe the Akaike Information Criterion is 53525, which is lower than in either of the previous models, even accounting for the addition of an extra parameter. This is therefore the model we will use going forward.
+
+### 4. Validating the model
+
+Now we want to use the testing dataset to evaluate model performance, which we read in and format to the include our variables $X_1$ and $X_2$.
 
 ```{r testdata}
 wta_test <- read_csv("data/WTATestingData.csv")
@@ -68,6 +111,8 @@ wta_test_outcomes <- bind_rows(wta_test_wins, wta_test_losses)
 wta_test_outcomes
 ```
 
+Next we use the `predict` function to calculate the log-odds for each of the matches in our testing data, using our fitted model from the previous step. Including the argument `se = TRUE` also outputs the standard error, which we can use to calculate 95% confidence intervals. The log-odds are then converted into probabilities using `plogis`.
+
 ```{r predict}
 preds <- bind_cols(wta_test_outcomes, predict(logit_both, newdata = wta_test_outcomes, type = "link", se = TRUE))
 preds <- within(preds, {
@@ -77,12 +122,7 @@ preds <- within(preds, {
 })
 ```
 
-```{r plot}
-ggplot(preds, aes(x = RankDiff, y = PtsDiff, col = Prob)) + 
-  geom_point(alpha = 0.8) + 
-  theme_minimal() +
-  scale_colour_gradientn(colours = terrain.colors(10), trans = 'reverse') 
-```
+To evaluate how well our model fits, we can graphically compare our expected and observed outcomes. We do this by separating the matches into equally spaced bins based on the predicted win probability and comparing the bin mid-point against the proportion of wins observed in that bin. We can also colour and size the points by the number of observations in each bin to visualise how much data is represented in each point. The closer our points are to the line $y=x$, the better our model is able to represent the data.
 
 ```{r qual_fit}
 bin_vals <- seq(0,1,0.05)
@@ -94,13 +134,21 @@ preds <- preds %>% group_by(bin) %>%
          y = c(bin_vals,rep(NA,nrow(preds)-length(bin_vals))))
 preds %>% ggplot(aes(x = bin, y = winrate)) + 
   geom_point(aes(color = count, size = count)) + geom_line(aes(x=x,y=y), lty = 2) +
-  labs(x = "predicted win probability", y = "proportion win") +
+  labs(x = "expected", y = "observed") +
   theme_minimal()
 ```
 
+We see that, whilst there is a good fit for expected win probabilities between 0.25% and 0.75, we underestimate the probability of the underdog winning in matches where the players have highly disparate rankings. This could potentially be due to bias in the rankings and points systems against players who have been out of competition for a period due to injury, or up-and-coming players who have not yet climbed the ranks but may be on an upward trajectory. If we wanted to improve our model, this is where we would focus our considerations.
+
+### 5. Prediction
+
+Now that we have fitted our model, and assessed the quality of the fit, we can think about predicting the outcomes of some matches. In this example we will focus on the four Grand Slam Finals that occurred in 2023. For each match, we have the player names, WTA ranks and points, and the best available betting odds at the time.
+
+Note: Betting odds are given in terms of "decimal" odds, which are given by the ratio between your bet and your expected return if successful. E.g., if you had decimal odds of 1.5 and you bet £100, you would expect a winning payout of £150. This value is simply given by $1/\pi$, where $\pi$ is the probability of winning.
+
 ```{r simulation}
 matches <- tibble(event = c("Australian Open", "French Open", "Wimbledon", "US Open"),
-                  player1 = c("Sabalenka","Swiatek", "Vondrusova","Gauff"),
+                  player1 = c("Sabalenka","Swiatek", "Vondrousova","Gauff"),
                   player2 = c("Rybakina","Muchova", "Jabeur","Sabalenka"),
                   RankDiff = c(5-25, 1-43, 42-6, 6-2),
                   PtsDiff = c(4340-1585, 8940-1125, 1106-3457, 4595-8746),
@@ -119,6 +167,6 @@ preds %>% mutate(winner_odds = 1/(Prob),
                  loser_odds = 1/(1-Prob))
 ```
 
-
+In this dataset, player 1 is always the winner, so we can use this to compare our predictions to the outcomes. We see that Sabalenka and Swiatek were both favorites for their matches in the Australian Open and French Open respectively, and went on to win the match, whereas both Wimbledon and the US Open were won by the lower ranked players: Vondrousova and Gauff. In particular, Gauff only had a 0.270 probability of winning the US Open Final, but this is not fully reflected in the available betting odds, indicating that perhaps the betting companies were basing their odds on more detailed information. We also note that the estimated probability of Swiatek winning the French Open was 0.9, which is above our rough 0.75 threshold where our model shows a bias towards the higher ranked player, indicating that this could potentially be an overestimate.
 
 
